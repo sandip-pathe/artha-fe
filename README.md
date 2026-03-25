@@ -15,6 +15,12 @@ npm install
 npm run dev
 ```
 
+Or with the Windows PowerShell helper script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev_frontend.ps1
+```
+
 The frontend will start on **http://localhost:3000**
 
 ### 3. Backend Must Be Running
