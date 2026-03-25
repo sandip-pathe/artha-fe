@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import { Paperclip, Send, Mic, X, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
