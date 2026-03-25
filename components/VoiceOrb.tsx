@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import type { Variants } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export type OrbState = "idle" | "listening" | "thinking" | "speaking";
@@ -19,19 +20,23 @@ export function VoiceOrb({
   volume = 0,
 }: VoiceOrbProps) {
   // Define animation variants for the main orb based on state
-  const orbVariants = {
+  const orbVariants: Variants = {
     idle: {
       scale: [1, 1.05, 1],
       opacity: [0.5, 0.8, 0.5],
       borderRadius: ["50%", "50%", "50%"],
-      transition: { duration: 3, repeat: Infinity, ease: "easeInOut" },
+      transition: { duration: 3, repeat: Infinity, ease: "easeInOut" as const },
     },
     listening: {
       scale: 1 + volume * 0.5,
       opacity: 0.9,
       borderRadius: ["50%", "45%", "55%", "50%"],
       transition: {
-        borderRadius: { duration: 2, repeat: Infinity, ease: "linear" },
+        borderRadius: {
+          duration: 2,
+          repeat: Infinity,
+          ease: "linear" as const,
+        },
         scale: { type: "spring", stiffness: 300, damping: 20 },
       },
     },
@@ -43,7 +48,7 @@ export function VoiceOrb({
       transition: {
         duration: 2,
         repeat: Infinity,
-        ease: "linear",
+        ease: "linear" as const,
       },
     },
     speaking: {
@@ -53,7 +58,7 @@ export function VoiceOrb({
       transition: {
         duration: 0.8,
         repeat: Infinity,
-        ease: "easeInOut",
+        ease: "easeInOut" as const,
       },
     },
   };
