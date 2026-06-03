@@ -3,6 +3,7 @@ node_modules/
 out/
 *.log
 *.tsbuildinfo
+fix_*.js
 .env.local
 .env.production.local
 .env.development.local
