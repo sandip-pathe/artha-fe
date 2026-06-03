@@ -13,6 +13,7 @@ import {
 
 interface StructuredDataProps {
   data: any;
+  format?: string;
 }
 
 export function StructuredData({ data }: StructuredDataProps) {

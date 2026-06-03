@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
 interface UseRealtimeVoiceProps {
-  phone: string;
+  authToken: string;
   onStateChange: (
     state: "idle" | "listening" | "thinking" | "speaking",
   ) => void;
@@ -16,7 +16,7 @@ interface UseRealtimeVoiceProps {
 }
 
 export function useRealtimeVoice({
-  phone,
+  authToken,
   onStateChange,
   onVolumeChange,
   onThinkingText,
@@ -38,15 +38,20 @@ export function useRealtimeVoice({
   const playbackSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const isPlayingRef = useRef(false);
   const requestStartRef = useRef<number | null>(null);
+  const nextPlayTimeRef = useRef(0);
 
   const startVoice = useCallback(async () => {
     try {
+      if (!authToken) {
+        onError?.("Please sign in first");
+        return;
+      }
       onError?.("");
       onReconnectState?.(false);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000, // Best for OpenAI Realtime
+          sampleRate: 24000,
         },
       });
       mediaStreamRef.current = stream;
@@ -58,17 +63,17 @@ export function useRealtimeVoice({
       const apiBase = new URL(configuredApiUrl, window.location.origin);
       const wsProtocol = apiBase.protocol === "https:" ? "wss:" : "ws:";
       const sessionId = `web-${Date.now().toString(36)}`;
-      const wsUrl = `${wsProtocol}//${apiBase.host}/api/realtime/ws?merchant_phone=${encodeURIComponent(phone)}&session_id=${encodeURIComponent(sessionId)}`;
+      const wsUrl = `${wsProtocol}//${apiBase.host}/api/realtime/ws?token=${encodeURIComponent(authToken)}&session_id=${encodeURIComponent(sessionId)}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       const AudioContext =
         window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = new AudioContext({ sampleRate: 16000 });
+      const audioCtx = new AudioContext({ sampleRate: 24000 });
       audioContextRef.current = audioCtx;
 
-      const playbackCtx = new AudioContext({ sampleRate: 24000 }); // Server audio rate
+      const playbackCtx = new AudioContext({ sampleRate: 24000 });
       playbackContextRef.current = playbackCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
@@ -101,9 +106,9 @@ export function useRealtimeVoice({
 
           // Barge-in detection
           if (rms > 0.05 && isPlayingRef.current) {
-            // User interrupted
             playbackSourceRef.current?.stop();
             isPlayingRef.current = false;
+            nextPlayTimeRef.current = 0;
             onStateChange("listening");
             ws.send(JSON.stringify({ type: "interrupt" }));
           }
@@ -125,20 +130,6 @@ export function useRealtimeVoice({
             );
           }
 
-          if (
-            rms > 0.02 &&
-            !isPlayingRef.current &&
-            requestStartRef.current === null
-          ) {
-            requestStartRef.current = performance.now();
-            ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
-            ws.send(
-              JSON.stringify({
-                type: "response.create",
-                response: { modalities: ["audio", "text"] },
-              }),
-            );
-          }
         };
       };
 
@@ -151,7 +142,23 @@ export function useRealtimeVoice({
           onStateChange("thinking");
         }
 
-        if (msg.type === "response.audio.delta" && msg.delta) {
+        if (msg.type === "input_audio_buffer.speech_started") {
+          requestStartRef.current = performance.now();
+          onStateChange("listening");
+          onThinkingText("Sun raha hoon...");
+        }
+
+        if (msg.type === "input_audio_buffer.speech_stopped") {
+          thinkingText = "Memory aur dukaan ka data dekh raha hoon...";
+          onThinkingText(thinkingText);
+          onStateChange("thinking");
+        }
+
+        if (
+          (msg.type === "response.output_audio.delta" ||
+            msg.type === "response.audio.delta") &&
+          msg.delta
+        ) {
           onStateChange("speaking");
           await playAudioChunk(msg.delta, playbackCtx);
         }
@@ -169,7 +176,11 @@ export function useRealtimeVoice({
           onThinkingText("");
         }
 
-        if (msg.type === "response.audio_transcript.done" && msg.transcript) {
+        if (
+          (msg.type === "response.output_audio_transcript.done" ||
+            msg.type === "response.audio_transcript.done") &&
+          msg.transcript
+        ) {
           onMessageReceived("bot", msg.transcript);
         }
 
@@ -201,7 +212,7 @@ export function useRealtimeVoice({
       stopVoice();
     }
   }, [
-    phone,
+    authToken,
     onStateChange,
     onVolumeChange,
     onThinkingText,
@@ -246,6 +257,7 @@ export function useRealtimeVoice({
     }
     isPlayingRef.current = false;
     requestStartRef.current = null;
+    nextPlayTimeRef.current = 0;
   }, [onStateChange, onVolumeChange, onReconnectState]);
 
   const toggleVoice = () => {
@@ -256,10 +268,11 @@ export function useRealtimeVoice({
     }
   };
 
-  // Helper to play base64 audio chunk
-  let nextPlayTime = 0;
   async function playAudioChunk(base64Audio: string, ctx: AudioContext) {
     try {
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
       const binaryString = window.atob(base64Audio);
       const len = binaryString.length;
       const bytes = new Uint8Array(len);
@@ -280,17 +293,17 @@ export function useRealtimeVoice({
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
 
-      if (nextPlayTime < ctx.currentTime) {
-        nextPlayTime = ctx.currentTime;
+      if (nextPlayTimeRef.current < ctx.currentTime) {
+        nextPlayTimeRef.current = ctx.currentTime;
       }
-      source.start(nextPlayTime);
-      nextPlayTime += audioBuffer.duration;
+      source.start(nextPlayTimeRef.current);
+      nextPlayTimeRef.current += audioBuffer.duration;
 
       playbackSourceRef.current = source;
       isPlayingRef.current = true;
 
       source.onended = () => {
-        if (ctx.currentTime >= nextPlayTime) {
+        if (ctx.currentTime >= nextPlayTimeRef.current) {
           isPlayingRef.current = false;
           onStateChange("listening");
         }

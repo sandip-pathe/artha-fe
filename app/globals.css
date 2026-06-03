@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    min-height: 100%;
+    background: #fff8ef;
+  }
+
   * {
     margin: 0;
     padding: 0;
@@ -10,12 +15,19 @@
   }
 
   body {
+    min-height: 100vh;
     @apply bg-background text-foreground font-sans antialiased;
   }
 
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
   ::selection {
-    background: rgba(255, 255, 255, 0.2);
-    color: #fff;
+    background: #f6e7d3;
+    color: #20120a;
   }
 }
 
