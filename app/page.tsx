@@ -14,6 +14,7 @@ import {
   Loader2,
   Mic,
   TrendingUp,
+  X,
 } from "lucide-react";
 import { InputBar } from "@/components/chat/InputBar";
 import { AttachSheet } from "@/components/chat/AttachSheet";
@@ -27,7 +28,7 @@ import {
   storeAuthSession,
   syncBackendSession,
 } from "@/lib/auth-session";
-import { useRealtimeVoice } from "@/lib/useRealtimeVoice";
+import { describeMicrophoneError, useRealtimeVoice } from "@/lib/useRealtimeVoice";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 
@@ -104,6 +105,7 @@ export default function Home() {
   const [voiceVolume, setVoiceVolume] = useState(0);
   const [thinkingText, setThinkingText] = useState("");
   const [voiceError, setVoiceError] = useState("");
+  const [micNotice, setMicNotice] = useState("");
   const [voiceLatencyMs, setVoiceLatencyMs] = useState<number | null>(null);
   const [isVoiceReconnecting, setIsVoiceReconnecting] = useState(false);
   const [lastVoiceUser, setLastVoiceUser] = useState("");
@@ -163,12 +165,19 @@ export default function Home() {
     toggleVoice,
     stopVoice,
     startVoice,
+    micPermission,
+    requestMicrophonePermission,
   } = useRealtimeVoice({
     authToken,
     onStateChange: setVoiceState,
     onVolumeChange: setVoiceVolume,
     onThinkingText: setThinkingText,
-    onError: setVoiceError,
+    onError: (text) => {
+      setVoiceError(text);
+      if (text.toLowerCase().includes("mic")) {
+        setMicNotice(text);
+      }
+    },
     onLatencyUpdate: setVoiceLatencyMs,
     onReconnectState: setIsVoiceReconnecting,
     onMessageReceived: (role, text) => {
@@ -643,6 +652,9 @@ export default function Home() {
       return;
     }
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new DOMException("Microphone unsupported", "NotSupportedError");
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     recordingStreamRef.current = stream;
 
@@ -691,8 +703,22 @@ export default function Home() {
     }
     try {
       await startVoiceRecording();
-    } catch {
+    } catch (err) {
       setIsRecording(false);
+      const message = describeMicrophoneError(err);
+      setMicNotice(message);
+      setVoiceError(message);
+    }
+  };
+
+  const handleRequestMicrophonePermission = async () => {
+    const granted = await requestMicrophonePermission();
+    if (granted) {
+      setMicNotice("");
+      setVoiceError("");
+      if (voicePanelOpen && !voiceActive) {
+        startVoice();
+      }
     }
   };
 
@@ -935,6 +961,33 @@ export default function Home() {
         onFilePick={handleFilePick}
       />
 
+      {micNotice && (
+        <div className="fixed bottom-28 left-0 right-0 z-40 px-4">
+          <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-lg border border-warning/30 bg-surface px-3 py-3 text-sm text-muted shadow-lg">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-text">Microphone access needed</p>
+              <p className="mt-0.5 leading-5">{micNotice}</p>
+              <button
+                type="button"
+                onClick={handleRequestMicrophonePermission}
+                className="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+              >
+                Allow microphone
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMicNotice("")}
+              className="rounded-full p-1 text-muted hover:text-text"
+              aria-label="dismiss microphone notice"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <RealtimeVoiceModal
         open={voicePanelOpen}
         state={voiceState}
@@ -950,6 +1003,8 @@ export default function Home() {
         errorText={voiceError}
         reconnecting={isVoiceReconnecting}
         latencyMs={voiceLatencyMs}
+        micPermission={micPermission}
+        onRequestPermission={handleRequestMicrophonePermission}
       />
 
       <MetricsBadge />

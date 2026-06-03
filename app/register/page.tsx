@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
-import { storeAuthSession, syncBackendSession } from "@/lib/auth-session";
+import { getStoredAuthSession, storeAuthSession, syncBackendSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 
 export default function RegisterPage() {
@@ -18,6 +18,12 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (getStoredAuthSession()) {
+      window.location.replace("/");
+    }
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -35,11 +41,13 @@ export default function RegisterPage() {
       if (!phone.trim()) {
         throw new Error("Phone number zaroori hai.");
       }
+      const normalizedEmail = email.trim().toLowerCase();
 
       const { data, error: authError } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             store_name: storeName.trim(),
             owner_name: ownerName.trim(),
@@ -54,13 +62,13 @@ export default function RegisterPage() {
       }
 
       if (!data.session?.access_token) {
-        setNotice("Account ban gaya. Email confirmation ke baad login karo.");
+        router.replace(`/confirm-email?email=${encodeURIComponent(normalizedEmail)}`);
         return;
       }
 
       const session = await syncBackendSession(data.session.access_token);
       storeAuthSession(session);
-      router.replace("/onboarding");
+      window.location.assign("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed. Dobara try karo.");
     } finally {

@@ -4,6 +4,7 @@ import { Mic, MicOff, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type VoiceState = "idle" | "listening" | "thinking" | "speaking";
+type MicPermission = PermissionState | "unknown" | "unsupported";
 
 type RealtimeVoiceModalProps = {
   open: boolean;
@@ -20,6 +21,8 @@ type RealtimeVoiceModalProps = {
   errorText?: string;
   reconnecting?: boolean;
   latencyMs?: number | null;
+  micPermission?: MicPermission;
+  onRequestPermission?: () => void;
 };
 
 const labelByState: Record<VoiceState, string> = {
@@ -44,6 +47,8 @@ export function RealtimeVoiceModal({
   errorText,
   reconnecting = false,
   latencyMs = null,
+  micPermission = "unknown",
+  onRequestPermission,
 }: RealtimeVoiceModalProps) {
   if (!open) {
     return null;
@@ -51,6 +56,14 @@ export function RealtimeVoiceModal({
 
   const bars = [0.45, 0.8, 1, 0.75, 0.5];
   const amp = Math.max(0.08, Math.min(1, volume));
+  const permissionMessage =
+    micPermission === "unsupported"
+      ? "Is browser mein microphone capture supported nahi hai."
+      : micPermission === "denied"
+        ? "Mic blocked hai. Browser address bar ke site settings se Microphone Allow karo, phir retry karo."
+        : micPermission === "prompt" || micPermission === "unknown"
+          ? "Realtime voice ke liye Artha ko microphone access chahiye."
+          : "";
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center">
@@ -78,6 +91,21 @@ export function RealtimeVoiceModal({
         </div>
 
         <div className="mb-5 rounded-2xl border border-[#1f1f1f] bg-[#101010] p-4">
+          {permissionMessage && !active && (
+            <div className="mb-4 rounded-xl border border-[#3a3323] bg-[#252013] p-3 text-[12px] text-[#f2dfbc]">
+              <p>{permissionMessage}</p>
+              {onRequestPermission && micPermission !== "unsupported" && (
+                <button
+                  type="button"
+                  onClick={onRequestPermission}
+                  className="mt-3 rounded-lg bg-[#f2dfbc] px-3 py-2 text-[12px] font-semibold text-[#20120a]"
+                >
+                  {micPermission === "denied" ? "Retry after allowing mic" : "Allow microphone"}
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex h-20 items-end justify-center gap-2">
             {bars.map((bar, index) => {
               const baseHeight =

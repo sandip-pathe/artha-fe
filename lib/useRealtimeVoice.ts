@@ -2,6 +2,11 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
+export type MicrophonePermissionState =
+  | PermissionState
+  | "unknown"
+  | "unsupported";
+
 interface UseRealtimeVoiceProps {
   authToken: string;
   onStateChange: (
@@ -15,6 +20,32 @@ interface UseRealtimeVoiceProps {
   onReconnectState?: (isReconnecting: boolean) => void;
 }
 
+export function describeMicrophoneError(error: unknown) {
+  const name =
+    error instanceof DOMException
+      ? error.name
+      : typeof error === "object" && error && "name" in error
+        ? String((error as { name?: unknown }).name || "")
+        : "";
+
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "Microphone blocked hai. Browser address bar se mic Allow karo, phir dobara start karo.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "Microphone nahi mila. Device connect karke phir try karo.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "Microphone kisi aur app mein busy lag raha hai. Dusri app band karke try karo.";
+  }
+  if (name === "SecurityError") {
+    return "Mic access ke liye HTTPS ya localhost page chahiye.";
+  }
+  if (name === "NotSupportedError") {
+    return "Is browser mein microphone capture supported nahi hai.";
+  }
+  return "Voice connect nahi hua. Mic permission aur network check karke retry karo.";
+}
+
 export function useRealtimeVoice({
   authToken,
   onStateChange,
@@ -26,6 +57,8 @@ export function useRealtimeVoice({
   onReconnectState,
 }: UseRealtimeVoiceProps) {
   const [isActive, setIsActive] = useState(false);
+  const [micPermission, setMicPermission] =
+    useState<MicrophonePermissionState>("unknown");
   const wsRef = useRef<WebSocket | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -40,6 +73,70 @@ export function useRealtimeVoice({
   const requestStartRef = useRef<number | null>(null);
   const nextPlayTimeRef = useRef(0);
 
+  const updateMicrophonePermission = useCallback(
+    (state: MicrophonePermissionState) => {
+      setMicPermission(state);
+    },
+    [],
+  );
+
+  const queryMicrophonePermission = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      updateMicrophonePermission("unsupported");
+      return "unsupported";
+    }
+    if (!navigator.permissions?.query) {
+      updateMicrophonePermission("unknown");
+      return "unknown";
+    }
+    try {
+      const status = await navigator.permissions.query({
+        name: "microphone" as PermissionName,
+      });
+      updateMicrophonePermission(status.state);
+      status.onchange = () => updateMicrophonePermission(status.state);
+      return status.state;
+    } catch {
+      updateMicrophonePermission("unknown");
+      return "unknown";
+    }
+  }, [updateMicrophonePermission]);
+
+  const getMicrophoneStream = useCallback(
+    async (constraints: MediaStreamConstraints) => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        updateMicrophonePermission("unsupported");
+        throw new DOMException("Microphone unsupported", "NotSupportedError");
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        updateMicrophonePermission("granted");
+        return stream;
+      } catch (err) {
+        const name = err instanceof DOMException ? err.name : "";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          updateMicrophonePermission("denied");
+        } else {
+          void queryMicrophonePermission();
+        }
+        throw err;
+      }
+    },
+    [queryMicrophonePermission, updateMicrophonePermission],
+  );
+
+  const requestMicrophonePermission = useCallback(async () => {
+    try {
+      const stream = await getMicrophoneStream({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      onError?.("");
+      return true;
+    } catch (err) {
+      onError?.(describeMicrophoneError(err));
+      return false;
+    }
+  }, [getMicrophoneStream, onError]);
+
   const startVoice = useCallback(async () => {
     try {
       if (!authToken) {
@@ -48,7 +145,7 @@ export function useRealtimeVoice({
       }
       onError?.("");
       onReconnectState?.(false);
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await getMicrophoneStream({
         audio: {
           channelCount: 1,
           sampleRate: 24000,
@@ -208,11 +305,12 @@ export function useRealtimeVoice({
         onReconnectState?.(true);
       };
     } catch (err) {
-      onError?.("Mic permission ya network issue aaya");
+      onError?.(describeMicrophoneError(err));
       stopVoice();
     }
   }, [
     authToken,
+    getMicrophoneStream,
     onStateChange,
     onVolumeChange,
     onThinkingText,
@@ -317,7 +415,18 @@ export function useRealtimeVoice({
     return () => stopVoice();
   }, [stopVoice]);
 
-  return { isActive, toggleVoice, stopVoice, startVoice };
+  useEffect(() => {
+    void queryMicrophonePermission();
+  }, [queryMicrophonePermission]);
+
+  return {
+    isActive,
+    toggleVoice,
+    stopVoice,
+    startVoice,
+    micPermission,
+    requestMicrophonePermission,
+  };
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {

@@ -1,25 +1,51 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { getStoredAuthSession, storeAuthSession, syncBackendSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("confirmed")) {
+      setNotice("Email confirm ho gaya. Ab login kar sakte ho.");
+    }
+
     const existing = getStoredAuthSession();
     if (existing) {
-      router.replace("/");
+      window.location.replace("/");
+      return;
     }
-  }, [router]);
+
+    let mounted = true;
+    const syncExistingSupabaseSession = async () => {
+      try {
+        const { data } = (await supabase?.auth.getSession()) || {};
+        const token = data?.session?.access_token;
+        if (!token || !mounted) {
+          return;
+        }
+        const session = await syncBackendSession(token);
+        storeAuthSession(session);
+        window.location.replace("/");
+      } catch {
+        // Stay on login; explicit sign-in will surface the real error.
+      }
+    };
+
+    void syncExistingSupabaseSession();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -40,7 +66,7 @@ export default function LoginPage() {
 
       const session = await syncBackendSession(data.session.access_token);
       storeAuthSession(session);
-      router.replace("/");
+      window.location.assign("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Dobara try karo.");
     } finally {
@@ -82,6 +108,11 @@ export default function LoginPage() {
           {error && (
             <div className="rounded-lg border border-danger/20 bg-danger/10 px-3 py-2 text-sm text-danger">
               {error}
+            </div>
+          )}
+          {notice && (
+            <div className="rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-sm text-success">
+              {notice}
             </div>
           )}
 
