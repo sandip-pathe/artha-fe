@@ -1,113 +1,122 @@
-# Pay-Gaurd Web Frontend
+# Artha Frontend
 
-Next.js 14 frontend for Artha payment guard system.
+Artha is a proof-of-concept AI munshi for small merchants. It gives shop owners a simple assistant that can remember shop context, answer business questions, support text and voice interactions, and help verify payment screenshots when connected to the backend.
 
-## Setup
+This repository contains the public-facing web app prototype. The backend, merchant data model, and deeper AI orchestration live separately.
 
-### 1. Install Dependencies
+## What It Demonstrates
+
+- Merchant authentication screens with Supabase support.
+- Onboarding and optional shop-context seeding.
+- Chat interface for daily business questions.
+- Realtime voice entry point.
+- Record-and-send voice note flow.
+- OCR/payment screenshot upload path.
+- Structured response rendering for summaries, lists, and alerts.
+- Mobile-first UI that can become a PWA.
+
+## Product Idea
+
+Small merchants do not want another dashboard. They want someone who remembers the shop, understands their language, and answers practical questions:
+
+- "Aaj kitna business hua?"
+- "Udhaar list dikhao."
+- "Top customers kaun hain?"
+- "Ye payment screenshot real hai?"
+- "Kal subah kisko reminder bhejna hai?"
+
+Artha explores that assistant layer: memory plus business tools plus voice.
+
+## Current Status
+
+This is a light experiment and proof-of-concept, not a production SaaS yet.
+
+Working prototype areas:
+
+- Auth and onboarding
+- Context seeding
+- Chat UI
+- Realtime voice UI
+- Voice-note UI
+- Payment/OCR upload wiring
+- Structured result cards
+
+Still experimental:
+
+- Production deployment
+- PWA packaging
+- Push notifications
+- Real merchant integrations
+- Memory governance and editing
+- Observability and billing
+
+## Running Locally
+
+Install dependencies:
+
 ```bash
-cd c:\x\pay-gaurd-web
 npm install
 ```
 
-### 2. Run Development Server
+Start the frontend:
+
 ```bash
 npm run dev
 ```
 
-Or with the Windows PowerShell helper script:
+By default the frontend expects the backend at:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\dev_frontend.ps1
-```
-
-The frontend will start on **http://localhost:3000**
-
-### 3. Backend Must Be Running
-Ensure the FastAPI backend is running on **http://localhost:8010**:
-```bash
-cd c:\x\pay-gaurd
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --log-level info
-```
-
-## Architecture
-
-### Dual Mode
-- **Frontend Mode** (active): Send test messages via web interface
-  - Messages go to backend's `/test-message` endpoint
-  - Backend processes them as if they came from WhatsApp
-  - Logs appear in terminal with [TEST_MSG] tag
-
-- **WhatsApp Mode** (passive): Real WhatsApp webhooks
-  - Meta sends webhooks to ngrok tunnel → localhost:8010
-  - Backend receives real messages via `/webhook` endpoint
-  - Easy to toggle by changing Meta webhook configuration
-
-### Running Both Simultaneously
-```bash
-# Terminal 1 - Backend (port 8010)
-cd c:\x\pay-gaurd
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
-
-# Terminal 2 - ngrok tunnel
-ngrok http 8010
-
-# Terminal 3 - Frontend (port 3000)
-cd c:\x\pay-gaurd-web
-npm run dev
-```
-
-Visit **http://localhost:3000** and start testing!
-
-## Features
-
-- ✅ Send test messages without WhatsApp
-- ✅ Real-time backend response
-- ✅ Health check endpoint
-- ✅ Mode selector (Frontend vs WhatsApp)
-- ✅ Full logging visibility in backend terminal
-
-## Switching to Real WhatsApp
-
-When ready:
-1. Change Meta webhook Callback URL to your ngrok URL
-2. Switch frontend mode selector to "WhatsApp"
-3. Send messages via real WhatsApp
-
-All code remains compatible - just flips between test/real sources.
-
-## File Structure
-
-```
-pay-gaurd-web/
-├── app/
-│   ├── page.tsx          # Main dashboard
-│   ├── layout.tsx        # Root layout
-│   └── globals.css       # Tailwind styles
-├── package.json
-├── tsconfig.json
-├── next.config.ts
-├── tailwind.config.js
-└── postcss.config.js
-```
-
-## Environment Variables
-
-Set in `.env.local` if needed:
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8010
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8010
 ```
 
-## Logs to Watch
+Set Supabase client values in `.env.local`:
 
-In backend terminal:
-```
-[TEST_MSG] phone=918767394523, mode=frontend, text='hii'...
-[MSG_PROCESS_START] phone=918767394523, type=text
-[MSG_AGENT_START] phone=918767394523, input_len=3
-[MSG_AGENT_DONE] phone=918767394523, intent=GREETING, response_len=45
-[SEND_MSG_START] phone=918767394523, text='Namaste...'
-[SEND_MSG_OK] Successfully sent to 918767394523
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8010
 ```
 
-Everything transparent. No silent failures.
+Then open:
+
+```text
+http://127.0.0.1:3000
+```
+
+## Repository Layout
+
+```text
+app/
+  auth/callback/        Supabase email confirmation callback
+  confirm-email/        Email confirmation screen
+  login/                Merchant login
+  onboarding/           Merchant profile and context seeding
+  register/             Merchant registration
+  page.tsx              Main Artha assistant interface
+components/
+  chat/                 Input and attachment UI
+  RealtimeVoiceModal.tsx
+lib/
+  auth-session.ts       Frontend session sync
+  supabase.ts           Supabase browser client
+  useRealtimeVoice.ts   Realtime voice hook
+```
+
+## Demo Narrative
+
+1. Merchant creates an account.
+2. Merchant optionally seeds shop context during onboarding.
+3. Merchant asks a daily business question in chat.
+4. Artha answers using merchant memory and backend tools.
+5. Merchant can use realtime voice or a recorded voice note.
+6. Merchant can upload payment screenshots for verification.
+
+## One-Pager
+
+See [ONE_PAGER.md](./ONE_PAGER.md) for the concise public pitch.
+
+## Notes
+
+Do not commit `.env.local`, API keys, Supabase secrets, backend credentials, merchant data, or local build artifacts.
+
